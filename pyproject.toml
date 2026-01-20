@@ -1,0 +1,19 @@
+[project]
+name = "yaaf"
+version = "0.1.0"
+description = "Yet Another Agentic Framework"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
