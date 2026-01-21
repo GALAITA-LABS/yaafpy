@@ -1,6 +1,12 @@
+import sys
+from pathlib import Path
+
+# Add local src folder to Python path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+
 import asyncio
 from yaaf.types import AgentConfig, ExecContext
-from yaaf.workflow import Workflow
+from yaaf.workflows import Workflow
 
 # 1. Define Middlewares
 async def logger_middleware(ctx: ExecContext):

@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, Optional, List, Tuple
 from pydantic import BaseModel, Field, PrivateAttr
 
 class AgentConfig(BaseModel):
@@ -23,15 +23,16 @@ class ExecContext(BaseModel):
     output: Any = Field(default=None, description="The accumulator for the final result")
     agent: AgentConfig = Field(..., description="The configuration currently in use")
     state: Dict[str, Any] = Field(default_factory=dict, description="Utility bag for store computations and bussines logic")
-    scope: Dict[str, Any] = Field(default_factory=dict, description="Ephemeral storage for current run")
+    storage: Dict[str, Any] = Field(default_factory=dict, description="Ephemeral storage for current run")
     stop: bool = Field(default=False, description="Flag to stop execution")
     error: Optional[str] = Field(default=None, description="Error message")
     steps: int = Field(default=0, description="Number of steps executed")
     tokens: int = Field(default=0, description="Number of tokens used")
     
     # Private fields for internal flow control
-    _cursor: int = PrivateAttr(default=0)
-    _jump_to: Optional[str] = PrivateAttr(default=None)
+    cursor: int = Field(default=0)
+    trace: List[Tuple[str, Any]] = Field(default_factory=list) # Execution trace or trajectory.
+    jump_to: Optional[str] = Field(default=None)
     _workflow: Optional[Any] = PrivateAttr(default=None)
 
     @property

@@ -22,6 +22,7 @@ async def test_nesting_batch(basic_ctx):
     
     # Parent
     parent = Workflow()
+    
     async def parent_step(ctx):
         ctx.input += "_Parent"
         return ctx

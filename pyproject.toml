@@ -15,5 +15,8 @@ dev = [
 ]
 
 [build-system]
-requires = ["hatchling"]
+requires = [
+  "hatchling",
+  "pathspec>=0.10"
+]
 build-backend = "hatchling.build"
