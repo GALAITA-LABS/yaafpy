@@ -1,11 +1,44 @@
 import logging
 from typing import Callable, Optional, Awaitable
 from yaaf.types import ExecContext
-from yaaf.workflows import Workflow
+import inspect
+from typing import AsyncIterator, Any
 
 logger = logging.getLogger("yaaf.funcs")
 
-def as_middleware(workflow: Workflow, ctx: Optional[ExecContext] = None) -> Callable[[ExecContext], Awaitable[ExecContext]]:
+
+
+async def normalize_step_result(result) -> AsyncIterator[Any]:
+    # Case 1: async generator
+    if inspect.isasyncgen(result):
+        async for item in result:
+            yield item
+        return
+
+    # Case 2: awaitable (async function)
+    if inspect.isawaitable(result):
+        value = await result
+        yield value
+        return
+
+    # Case 3: sync generator (optional but powerful)
+    if inspect.isgenerator(result):
+        for item in result:
+            yield item
+        return
+
+    # Case 4: normal value
+    yield result
+
+
+def as_middleware_stream(workflow: "Workflow", ctx: Optional[ExecContext] = None) -> Callable[[ExecContext], Awaitable[ExecContext]]:
+    async def middleware(ctx: ExecContext):
+        async for out_ctx in workflow.run_stream(ctx):
+            yield out_ctx
+    return middleware
+
+
+def as_middleware(workflow: "Workflow", ctx: Optional[ExecContext] = None) -> Callable[[ExecContext], Awaitable[ExecContext]]:
     """
     Wraps a Workflow object as a middleware function.
     

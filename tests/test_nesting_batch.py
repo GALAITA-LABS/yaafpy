@@ -7,7 +7,7 @@ from yaaf.adapters import as_middleware
 def basic_ctx():
     return ExecContext(
         session_id="test",
-        agent=AgentConfig(model_name="test"),
+        agent=AgentConfig(model="test"),
         input="Start"
     )
 

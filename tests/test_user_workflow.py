@@ -16,8 +16,8 @@ async def test_workflow_access(basic_ctx):
     
     async def check_registry(ctx):
         # Verify we can access the workflow instance and its registry
-        assert ctx._workflow is not None
-        assert ctx._workflow == wf
+        assert ctx.workflow is not None
+        assert ctx.workflow == wf
         assert "check_registry" in ctx.workflow._registry
         ctx.input += "_verified"
         return ctx
