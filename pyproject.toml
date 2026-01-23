@@ -1,5 +1,5 @@
 [project]
-name = "yaaf"
+name = "yaafpy"
 version = "0.1.0"
 description = "Yet Another Agentic Framework"
 readme = "README.md"
