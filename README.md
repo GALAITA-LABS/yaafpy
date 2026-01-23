@@ -27,7 +27,7 @@ async def echo_step(ctx):
 async def main():
     wf = Workflow()
     wf.use(echo_step)    
-    ctx = ExecContext(session_id="test", agent=AgentConfig(model_name="gpt-4"), input="Hello")
+    ctx = ExecContext(session_id="test", agent=AgentConfig(model="gpt-4"), input="Hello")
     result = await wf.run(ctx)
     print(result.input)
 
