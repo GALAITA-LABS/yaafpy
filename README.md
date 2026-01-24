@@ -11,14 +11,14 @@ A stream-first, middleware-based Python framework for building agentic AI flows.
 
 ## Installation
 ```bash
-pip install yaaf
+pip install yaafpy
 ```
 
 ## Quick Start
 ```python
 import asyncio
-from yaaf.types import AgentConfig, ExecContext
-from yaaf.workflows import Workflow
+from yaafpy.types import AgentConfig, ExecContext
+from yaafpy.workflows import Workflow
 
 async def echo_step(ctx):
     ctx.input = f"Echo: {ctx.input}"
