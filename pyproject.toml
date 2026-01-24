@@ -1,6 +1,6 @@
 [project]
 name = "yaafpy"
-version = "0.1.0"
+version = "0.1.1"
 description = "Yet Another Agentic Framework"
 readme = "README.md"
 requires-python = ">=3.9"
