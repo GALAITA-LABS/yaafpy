@@ -1,8 +1,8 @@
 import pytest
 import logging
-from yaaf.types import AgentConfig, ExecContext
-from yaaf.workflows import Workflow
-from yaaf.adapters import as_middleware
+from yaafpy.types import AgentConfig, ExecContext
+from yaafpy.workflows import Workflow
+from yaafpy.adapters import as_middleware
 
 # Setup simple logging capture
 logging.basicConfig(level=logging.INFO)

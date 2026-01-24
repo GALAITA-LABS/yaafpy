@@ -1,8 +1,8 @@
 import logging
 import inspect
 from typing import Callable, List, Dict, Optional, Any, AsyncGenerator, Awaitable
-from yaaf.adapters import normalize_step_result
-from yaaf.types import ExecContext
+from yaafpy.adapters import normalize_step_result
+from yaafpy.types import ExecContext
 
 logger = logging.getLogger("yaaf.workflow")
 
