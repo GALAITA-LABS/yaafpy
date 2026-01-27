@@ -11,7 +11,7 @@ class Workflow:
         self._middleware: List[Callable[[ExecContext], Awaitable[ExecContext]]] = []
         self._registry: Dict[str, int] = {}
 
-    def use(self, middleware: Callable[[ExecContext], Awaitable[ExecContext]], name: Optional[str] = None):
+    def use(self, middleware: Callable[[ExecContext], Awaitable[ExecContext]], name: Optional[str] = None): # Coul be interesting add description to the middlewares
         self._middleware.append(middleware)
         if name:
             self._registry[name] = len(self._middleware) - 1
@@ -50,6 +50,8 @@ class Workflow:
                         exec_ctx = new_ctx
 
                         if exec_ctx.stop:
+                            # Should clean the stop flag to allow the next run
+                            exec_ctx.stop = False
                             return exec_ctx
 
                         if exec_ctx.jump_to:
@@ -108,6 +110,8 @@ class Workflow:
                     raise ValueError("Middleware returned None")
 
                 if exec_ctx.stop:
+                    # Should clean the stop flag to allow the next run
+                    exec_ctx.stop = False
                     return exec_ctx
 
                 if exec_ctx.jump_to and self._registry.get(exec_ctx.jump_to) is None:

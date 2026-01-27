@@ -1,6 +1,28 @@
 from typing import Any, Dict, Optional, List, Tuple
 from pydantic import BaseModel, Field, PrivateAttr
 
+
+class WorkflowAllowException(Exception):
+    """Exception raised for a middleware execption that allow the execution to continue"""
+
+    def __init__(self, message):
+        super().__init__(message)
+        
+class WorkflowAbortException(Exception):
+    """Exception raised for Abort execution of the all workflow"""
+
+    def __init__(self, message):
+        super().__init__(message)        
+
+class WorkflowStopException(Exception):
+    """Exception raised for Stop execution of the current worflow"""
+
+    def __init__(self, message):
+        super().__init__(message)
+
+
+
+
 class AgentConfig(BaseModel):
     """
     Holds static configuration for an Agent.
