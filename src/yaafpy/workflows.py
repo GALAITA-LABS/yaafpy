@@ -1,17 +1,22 @@
 import logging
 import inspect
-from typing import Callable, List, Dict, Optional, Any, AsyncGenerator, Awaitable
+from typing import Callable, List, Dict, Optional, Any, AsyncGenerator, Awaitable, TypeAlias, Union
 from yaafpy.adapters import normalize_step_result
 from yaafpy.types import ExecContext
 
 logger = logging.getLogger("yaaf.workflow")
 
+Middleware: TypeAlias = Callable[
+    [ExecContext],
+    Union[ExecContext, Awaitable[ExecContext]]
+]
+
 class Workflow:
     def __init__(self):
-        self._middleware: List[Callable[[ExecContext], Awaitable[ExecContext]]] = []
+        self._middleware: List[Middleware] = []
         self._registry: Dict[str, int] = {}
 
-    def use(self, middleware: Callable[[ExecContext], Awaitable[ExecContext]], name: Optional[str] = None): # Coul be interesting add description to the middlewares
+    def use(self, middleware: Middleware, name: Optional[str] = None): # Coul be interesting add description to the middlewares
         self._middleware.append(middleware)
         if name:
             self._registry[name] = len(self._middleware) - 1
@@ -99,9 +104,11 @@ class Workflow:
                 
                 copy_ctx = exec_ctx.model_copy(deep=True)
                 copy_ctx.workflow = self # Keep the workflow reference because it is lost during copy
+                #try/catch
                 result = self._middleware[cursor](copy_ctx)
                 
                 if inspect.isawaitable(result):
+                   #try/catch 
                    exec_ctx = await result
                 else:
                    exec_ctx = result
