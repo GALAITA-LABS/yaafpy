@@ -20,8 +20,8 @@ class ExecContext(BaseModel):
     The mutable state carrier for the workflow. Every step have the own ExecContext
     """
     session_id: Optional[str] = Field(default=None, description="Unique identifier for the session")
-    input: Any = Field(default=None, description="The data entering the current step")
-    output: Any = Field(default=None, description="The accumulator for the final result")
+    input: Any = Field(default=None, description="The data seed most likely from user")
+    output: Any = Field(default=None, description="The computation output for the current step or middleware. Use as input for the next step (Recommended)")
     agent: AgentConfig = Field(..., description="The configuration currently in use")
     state: Dict[str, Any] = Field(default_factory=dict, description="Utility bag for store computations and bussines logic")
     storage: Dict[str, Any] = Field(default_factory=dict, description="Ephemeral storage for current run")
