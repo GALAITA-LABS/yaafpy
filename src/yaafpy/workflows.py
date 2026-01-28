@@ -2,7 +2,7 @@ import logging
 import inspect
 from typing import Callable, List, Dict, Optional, Any, AsyncGenerator, Awaitable, TypeAlias, Union
 from yaafpy.adapters import normalize_step_result
-from yaafpy.types import ExecContext
+from yaafpy.types import ExecContext, WorkflowAllowException, WorkflowAbortException, WorkflowStopException
 
 logger = logging.getLogger("yaaf.workflow")
 
@@ -106,12 +106,29 @@ class Workflow:
                 
                 copy_ctx = exec_ctx.model_copy(deep=True)
                 copy_ctx.workflow = self # Keep the workflow reference because it is lost during copy
-                #try/catch
-                result = self._middleware[cursor](copy_ctx)
+                try:
+                    result = self._middleware[cursor](copy_ctx)
+                except WorkflowAllowException as e:
+                    logger.error(f"[Workflow Error] Step index {cursor} failed: {e}")
+                    cursor+=1
+                    continue
+                except WorkflowAbortException as e:
+                    logger.error(f"[Workflow Error] Step index {cursor} failed: {e}")
+                    copy_ctx.stop = True
+                    return copy_ctx
+                
                 
                 if inspect.isawaitable(result):
-                   #try/catch 
-                   exec_ctx = await result
+                   try:
+                        exec_ctx = await result
+                   except WorkflowAllowException as e:
+                        logger.error(f"[Workflow Error] Step index {cursor} failed: {e}")
+                        cursor+=1
+                        continue
+                   except WorkflowAbortException as e:
+                        logger.error(f"[Workflow Error] Step index {cursor} failed: {e}")
+                        copy_ctx.stop = True
+                        return copy_ctx
                 else:
                    exec_ctx = result
                 
