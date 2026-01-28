@@ -7,6 +7,7 @@ from typing import AsyncIterator, Any
 logger = logging.getLogger("yaaf.funcs")
 
 
+Middleware: TypeAlias = Callable[[ExecContext], Union[ExecContext, Awaitable[ExecContext]]]
 
 async def normalize_step_result(result) -> AsyncIterator[Any]:
     # Case 1: async generator
@@ -31,14 +32,14 @@ async def normalize_step_result(result) -> AsyncIterator[Any]:
     yield result
 
 
-def as_middleware_stream(workflow: "Workflow", ctx: Optional[ExecContext] = None) -> Callable[[ExecContext], Awaitable[ExecContext]]:
+def as_middleware_stream(workflow: "Workflow", ctx: Optional[ExecContext] = None) -> Middleware:
     async def middleware(ctx: ExecContext):
         async for out_ctx in workflow.run_stream(ctx):
             yield out_ctx
     return middleware
 
 
-def as_middleware(workflow: "Workflow", ctx: Optional[ExecContext] = None) -> Callable[[ExecContext], Awaitable[ExecContext]]:
+def as_middleware(workflow: "Workflow", ctx: Optional[ExecContext] = None) -> Middleware:
     """
     Wraps a Workflow object as a middleware function.
     
