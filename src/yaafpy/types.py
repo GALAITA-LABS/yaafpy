@@ -1,24 +1,26 @@
 from typing import Any, Dict, Optional, List, Tuple
 from pydantic import BaseModel, Field, PrivateAttr
 
-
+"""
+Allows skipping a specific middleware and continues with the normal execution path.
+Use this when a middleware should be conditionally bypassed without interrupting the workflow.
+"""
 class WorkflowAllowException(Exception):
     """Exception raised for a middleware execption that allow the execution to continue"""
 
     def __init__(self, message):
         super().__init__(message)
-        
+"""
+Propagates a stop flag that immediately terminates execution and prevents any follow-up runs.
+Use this when the workflow must be explicitly halted.
+"""        
 class WorkflowAbortException(Exception):
     """Exception raised for Abort execution of the all workflow"""
 
     def __init__(self, message):
         super().__init__(message)        
 
-class WorkflowStopException(Exception):
-    """Exception raised for Stop execution of the current worflow"""
 
-    def __init__(self, message):
-        super().__init__(message)
 
 
 
