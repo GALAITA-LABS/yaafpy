@@ -15,9 +15,11 @@ class Workflow:
     def __init__(self):
         self._middleware: List[Middleware] = []
         self._registry: Dict[str, int] = {}
+        self._description: List[str] = []
 
-    def use(self, middleware: Middleware, name: Optional[str] = None): # Coul be interesting add description to the middlewares
+    def use(self, middleware: Middleware, name: Optional[str] = None, description: Optional[str] = None): # Coul be interesting add description to the middlewares
         self._middleware.append(middleware)
+        self._description.append(description)
         if name:
             self._registry[name] = len(self._middleware) - 1
         else:
