@@ -2,7 +2,7 @@ import logging
 import inspect
 from typing import Callable, List, Dict, Optional, Any, AsyncGenerator, Awaitable, TypeAlias, Union
 from yaafpy.adapters import normalize_step_result
-from yaafpy.types import ExecContext, WorkflowAllowException, WorkflowAbortException, WorkflowStopException
+from yaafpy.types import ExecContext, WorkflowAllowException, WorkflowAbortException
 
 logger = logging.getLogger("yaaf.workflow")
 

@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, Optional, Awaitable
+from typing import Callable, Optional, Awaitable,Union,TypeAlias
 from yaafpy.types import ExecContext
 import inspect
 from typing import AsyncIterator, Any

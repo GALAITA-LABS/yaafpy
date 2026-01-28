@@ -1,5 +1,5 @@
 from .workflows import Workflow
-from .types import ExecContext, AgentConfig, WorkflowAllowException, WorkflowAbortException, WorkflowStopException
+from .types import ExecContext, AgentConfig, WorkflowAllowException, WorkflowAbortException
 from .adapters import as_middleware, normalize_step_result
 
 __all__ = [
@@ -8,9 +8,8 @@ __all__ = [
     "AgentConfig",
     "WorkflowAllowException",
     "WorkflowAbortException",
-    "WorkflowStopException",
     "as_middleware",
     "normalize_step_result"
 ]
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"

@@ -45,3 +45,23 @@ async def test_static_pipeline(basic_ctx):
     final_ctx = await wf.run(basic_ctx)
     assert final_ctx.input == "start_step1_step2"
 
+
+@pytest.mark.asyncio
+async def test_static_sync_async_pipeline(basic_ctx):
+    
+    wf = Workflow()
+    
+    async def step1(ctx):
+        ctx.input += "_step1"
+        return ctx
+        
+    def step2(ctx):
+        ctx.input += "_step2"
+        return ctx
+        
+    wf.use(step1)
+    wf.use(step2)
+    
+    final_ctx = await wf.run(basic_ctx)
+    assert final_ctx.input == "start_step1_step2"
+
