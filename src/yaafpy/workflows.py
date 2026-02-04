@@ -85,12 +85,16 @@ class Workflow:
             raise ValueError("Jump target is not valid")  
 
         if ctx is None:
-            exec_ctx = ExecContext(workflow=self)
+            exec_ctx = ExecContext()
         else:
             exec_ctx = ctx
+
         
         if ctx.stop:
             return ctx
+            
+        #Always bind the workflow to new or injected context
+        exec_ctx.workflow = self
         
         if ctx.jump_to is None:
             cursor = 0

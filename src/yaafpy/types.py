@@ -46,17 +46,16 @@ class ExecContext(BaseModel):
     session_id: Optional[str] = Field(default=None, description="Unique identifier for the session")
     input: Any = Field(default=None, description="The data seed most likely from user")
     output: Any = Field(default=None, description="The computation output for the current step or middleware. Use as input for the next step (Recommended)")
-    agent: AgentConfig = Field(..., description="The configuration currently in use")
+    agent: Optional[AgentConfig] = Field(default=None, description="The configuration currently in use")
     state: Dict[str, Any] = Field(default_factory=dict, description="Utility bag for store computations and bussines logic")
     storage: Dict[str, Any] = Field(default_factory=dict, description="Ephemeral storage for current run")
     stop: bool = Field(default=False, description="Flag to stop execution")
     error: Optional[str] = Field(default=None, description="Error message")
-    steps: int = Field(default=0, description="Number of steps executed")
-    tokens: int = Field(default=0, description="Number of tokens used")
+    metrics: Dict[str, Any] = Field(default_factory=dict, description="Keep track of latency, token_usage,steps and other metrics")
     
     # Private fields for internal flow control
     cursor: int = Field(default=0)
     trace: List[Tuple[str, Any]] = Field(default_factory=list) # Execution trace or trajectory.
     jump_to: Optional[str] = Field(default=None)
-    workflow: Optional[Any] = Field(default=None)
+    workflow: Optional["Workflow"] = Field(default=None) # Reference to the parent workflow
 
