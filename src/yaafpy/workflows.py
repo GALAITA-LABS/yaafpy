@@ -2,7 +2,7 @@ import logging
 import inspect
 from typing import Callable, List, Dict, Optional, Any, AsyncGenerator, Awaitable, TypeAlias, Union
 from yaafpy.adapters import normalize_step_result
-from yaafpy.types import ExecContext, WorkflowAllowException, WorkflowAbortException
+from yaafpy.types import ExecContext, WorkflowAbortException
 
 logger = logging.getLogger("yaaf.workflow")
 
@@ -16,6 +16,17 @@ class Workflow:
         self._middleware: List[Middleware] = []
         self._registry: Dict[str, int] = {}
         self._description: List[str] = []
+        self._cleanup_tasks: List[Callable] = []
+
+    async def __call__(self, ctx: ExecContext) -> ExecContext:
+        """Permite que el workflow se use como un middleware."""
+        return await self.run(ctx)
+
+    def register_cleanup(self, task: Callable):
+        """
+        Registra una tarea de limpieza que se ejecutará al finalizar el flujo.
+        """
+        self._cleanup_tasks.append(task)
 
     def use(self, middleware: Middleware, name: Optional[str] = None, description: Optional[str] = None): # Coul be interesting add description to the middlewares
         self._middleware.append(middleware)
@@ -27,137 +38,82 @@ class Workflow:
         return self
 
 
-    async def run_stream(self, ctx: Optional[ExecContext] = None) -> ExecContext:
+    async def _execute_cleanup(self):
+        """
+        Ejecuta todas las tareas de limpieza registradas en el contexto.
+        Maneja tanto funciones síncronas como asíncronas.
+        """
+        if not hasattr(self, '_cleanup_tasks') or not self._cleanup_tasks:
+            return
 
-            if ctx and ctx.jump_to and self._registry.get(ctx.jump_to) is None:
-                raise ValueError("Jump target is not valid")
-
-            exec_ctx = ctx or ExecContext(_workflow=self)
-
-            if exec_ctx.stop:
-                return exec_ctx
-
-            cursor = self._registry.get(exec_ctx.jump_to, 0) if exec_ctx.jump_to else 0
-            n = len(self._middleware)
-
-            while cursor < n:
-                step = self._middleware[cursor]
-
-                try:
-                    copy_ctx = exec_ctx.model_copy(deep=True)
-                    copy_ctx._workflow = self
-
-                    result = step(copy_ctx)
-
-                    async for new_ctx in normalize_step_result(result):
-
-                        if new_ctx is None:
-                            raise ValueError("Middleware returned None")
-
-                        exec_ctx = new_ctx
-
-                        if exec_ctx.stop:
-                            # Should clean the stop flag to allow the next run
-                            exec_ctx.stop = False
-                            return exec_ctx
-
-                        if exec_ctx.jump_to:
-                            if exec_ctx.jump_to not in self._registry:
-                                raise ValueError(f"Jump target {exec_ctx.jump_to} not found")
-                            cursor = self._registry[exec_ctx.jump_to]
-                            exec_ctx.jump_to = None
-                            break  # break inner async-for → continue outer while
-
-                        else:
-                            cursor += 1  # normal progression
-
-                except Exception as e:
-                    logger.error(f"[Workflow Error] Step index {cursor} failed: {e}")
-                    exec_ctx.stop = True
-                    return exec_ctx
-
-            return exec_ctx
+        logger.info(f"Iniciando limpieza de {len(self._cleanup_tasks)} tareas...")
+        
+        # Ejecutamos en orden inverso (LIFO)
+        while self._cleanup_tasks:
+            task = self._cleanup_tasks.pop()
+            try:
+                if inspect.iscoroutinefunction(task):
+                    await task()
+                elif callable(task):
+                    task()
+            except Exception as e:
+                # No permitimos que un fallo en un cleanup detenga los demás
+                logger.error(f"Error en tarea de limpieza: {e}")
 
 
     async def run(self, ctx: Optional[ExecContext] = None) -> ExecContext:
-    
-        if ctx and ctx.jump_to and self._registry.get(ctx.jump_to) is None: 
-            raise ValueError("Jump target is not valid")  
-
-        if ctx is None:
-            exec_ctx = ExecContext()
-        else:
-            exec_ctx = ctx
-
-        
-        if ctx.stop:
-            return ctx
             
-        #Always bind the workflow to new or injected context
-        exec_ctx.workflow = self
-        
-        if ctx.jump_to is None:
-            cursor = 0
-        else:
-            cursor = self._registry[ctx.jump_to]
+            exec_ctx = ctx if ctx is not None else ExecContext()
+            exec_ctx.workflow = self
+            
+            # Determinamos inicio (cursor)
+            cursor = 0 if exec_ctx.jump_to is None else self._registry[exec_ctx.jump_to]
+            exec_ctx.jump_to = None
+            
+            n = len(self._middleware)
 
-        n = len(self._middleware)
-
-        while cursor < n:
             try:
-                # Force functional approach: 
-                # Pass a COPY of the context so middleware cannot mutate the loop's reference in-place
-                
-                copy_ctx = exec_ctx.model_copy(deep=True)
-                copy_ctx.workflow = self # Keep the workflow reference because it is lost during copy
-                try:
-                    result = self._middleware[cursor](copy_ctx)
-                except WorkflowAllowException as e:
-                    logger.error(f"[Workflow Error] Step index {cursor} failed: {e}")
-                    cursor+=1
-                    continue
-                except WorkflowAbortException as e:
-                    logger.error(f"[Workflow Error] Step index {cursor} failed: {e}")
-                    copy_ctx.stop = True
-                    return copy_ctx
-                
-                
-                if inspect.isawaitable(result):
-                   try:
-                        exec_ctx = await result
-                   except WorkflowAllowException as e:
-                        logger.error(f"[Workflow Error] Step index {cursor} failed: {e}")
-                        cursor+=1
+                while cursor < n:
+                    
+                    # El decorador garantiza que aquí siempre recibimos un ExecContext 
+                    # o se lanza una WorkflowAbortException.
+                    exec_ctx = await self._middleware[cursor](exec_ctx)
+
+                    if exec_ctx.stop:
+                        return exec_ctx
+
+                    # Lógica de Jump (Solo datos sólidos)
+                    if exec_ctx.jump_to:
+                        if inspect.isasyncgen(exec_ctx.data):
+                            raise RuntimeError("No se permite Jump con generadores activos.")
+                        
+                        # 2. Validamos la existencia del destino
+                        if exec_ctx.jump_to not in self._registry:
+                            # Abortamos con un mensaje que ayude al desarrollador
+                            raise WorkflowAbortException(
+                                f"Salto inválido: El destino '{exec_ctx.jump_to}' no existe en el registro. "
+                                f"Destinos disponibles: {list(self._registry.keys())}"
+                            )
+                        
+                        cursor = self._registry[exec_ctx.jump_to]
+                        exec_ctx.jump_to = None
                         continue
-                   except WorkflowAbortException as e:
-                        logger.error(f"[Workflow Error] Step index {cursor} failed: {e}")
-                        copy_ctx.stop = True
-                        return copy_ctx
-                else:
-                   exec_ctx = result
-                
-                if exec_ctx is None:
-                    raise ValueError("Middleware returned None")
 
-                if exec_ctx.stop:
-                    # Should clean the stop flag to allow the next run
-                    exec_ctx.stop = False
-                    return exec_ctx
+                    cursor += 1
 
-                if exec_ctx.jump_to and self._registry.get(exec_ctx.jump_to) is None:
-                    raise ValueError(f"Jump target {exec_ctx.jump_to} not found in registry")
+                # Validación Final de Integridad
+                if inspect.isasyncgen(exec_ctx.data):
+                    raise RuntimeError("Fuga de generador detectada al final del flujo.")
 
-                if exec_ctx.jump_to:
-                    cursor = self._registry[exec_ctx.jump_to]
-                    exec_ctx.jump_to = None
-                else:
-                    cursor +=1 
-            
-            except Exception as e:
-                logger.error(f"[Workflow Error] Step index {cursor} failed: {e}")
+            except WorkflowAbortException:
+                # El aborto sube aquí, marca el stop y el finally limpia todo.
                 exec_ctx.stop = True
-                return exec_ctx 
+                raise 
+
+            finally:
+                # Limpieza de recursos registrados por los middlewares (DB, archivos, etc.)
+                await self._execute_cleanup()
             
-        return exec_ctx 
+            return exec_ctx
             
 

@@ -21,41 +21,22 @@ class WorkflowAbortException(Exception):
         super().__init__(message)        
 
 
+from typing import Any, Dict, Optional
+from dataclasses import dataclass, field
+import copy
 
-
-
-
-class AgentConfig(BaseModel):
-    """
-    Holds static configuration for an Agent.
-    """
-    model: str = Field(default="", description="The name of the LLM model to use")
-    prompt: str = Field(default="", description="The system prompt for the agent")
-    temperature: float = Field(default=0.7, description="Sampling temperature")
-    tools: List[Dict[str, Any]] = Field(default_factory=list, description="List of tool definitions")
-    name: Optional[str] = Field(default=None, description="The name of the agent")
-    description: Optional[str] = Field(default=None, description="A description of the agent")
-    # Allow extra configuration
-    model_config = {"extra": "allow"}
-
-
-class ExecContext(BaseModel):
-    """
-    The mutable state carrier for the workflow. Every step have the own ExecContext
-    """
-    session_id: Optional[str] = Field(default=None, description="Unique identifier for the session")
-    input: Any = Field(default=None, description="The data seed most likely from user")
-    output: Any = Field(default=None, description="The computation output for the current step or middleware. Use as input for the next step (Recommended)")
-    agent: Optional[AgentConfig] = Field(default=None, description="The configuration currently in use")
-    state: Dict[str, Any] = Field(default_factory=dict, description="Utility bag for store computations and bussines logic")
-    storage: Dict[str, Any] = Field(default_factory=dict, description="Ephemeral storage for current run")
-    stop: bool = Field(default=False, description="Flag to stop execution")
-    error: Optional[str] = Field(default=None, description="Error message")
-    metrics: Dict[str, Any] = Field(default_factory=dict, description="Keep track of latency, token_usage,steps and other metrics")
+@dataclass
+class ExecContext:
+    # 1. El Payload: Los datos de negocio que se transforman
+    data: Any
     
-    # Private fields for internal flow control
-    cursor: int = Field(default=0)
-    trace: List[Tuple[str, Any]] = Field(default_factory=list) # Execution trace or trajectory.
-    jump_to: Optional[str] = Field(default=None)
-    workflow: Optional["Workflow"] = Field(default=None) # Reference to the parent workflow
+    # 2. Control de Flujo: Flags para el motor
+    jump_to: Optional[str] = None
+    stop: bool = False
+    
+    # 3. Bus de Infraestructura: Aquí vive TODO lo demás
+    # - shared_data['metadata']: Trazabilidad, logs, IDs
+    # - shared_data['cleanup']: El CleanupManager
+    # - shared_data['auth']: Tokens o info de sesión
+    shared_data: Dict[str, Any] = field(default_factory=dict)
 
