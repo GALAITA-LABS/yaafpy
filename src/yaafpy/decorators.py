@@ -2,6 +2,40 @@ from yaafpy.types import WorkflowAllowException, WorkflowAbortException
 import copy
 import inspect
 import functools
+from typing import Callable
+
+
+def stream_transform(handler: Callable):
+    """
+    Especializado en transformar items. 
+    Envuelve el generador actual y captura errores del stream.
+    """
+    @functools.wraps(handler)
+    async def wrapper(ctx: 'ExecContext') -> 'ExecContext':
+        if ctx.stop or not inspect.isasyncgen(ctx.data):
+            return ctx
+
+        source_gen = ctx.data
+
+        async def pipeline_wrapper():
+            try:
+                async for item in source_gen:
+                    
+                    res = await handler(item) if inspect.iscoroutinefunction(handler) else handler(item)
+                    
+                    if res is not None:
+                        yield res
+            except Exception as e:
+                # Si el stream falla (red, parsing, etc), abortamos el workflow
+                raise WorkflowAbortException(f"Stream failure in {handler.__name__}: {e}") from e
+            finally:
+                # Cierre en cascada: asegura que el generador anterior se libere
+                await source_gen.aclose()
+
+        ctx.data = pipeline_wrapper()
+        return ctx
+        
+    return wrapper
 
 def middleware(func):
     @functools.wraps(func)

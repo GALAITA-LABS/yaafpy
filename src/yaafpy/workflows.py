@@ -1,7 +1,6 @@
 import logging
 import inspect
 from typing import Callable, List, Dict, Optional, Any, AsyncGenerator, Awaitable, TypeAlias, Union
-from yaafpy.adapters import normalize_step_result
 from yaafpy.types import ExecContext, WorkflowAbortException
 
 logger = logging.getLogger("yaaf.workflow")
@@ -11,11 +10,79 @@ Middleware: TypeAlias = Callable[
     Union[ExecContext, Awaitable[ExecContext]]
 ]
 
+
+class StreamWorkflow:
+    def __init__(self):
+        self._middleware: List[Callable] = []
+        self._registry: Dict[str, int] = {}
+
+    def use(self, middleware: Callable):
+        self._middleware.append(middleware)
+        return self
+
+    def _stream_transform(self, handler: Callable):
+        """
+        Encapsula la lógica que propusiste: envuelve el generador actual
+        en uno nuevo que aplica el 'handler' a cada item.
+        """
+        async def wrapper(ctx: Any) -> Any:
+            # Si no hay un generador previo, creamos uno base con el input inicial
+            if not inspect.isasyncgen(ctx.data):
+                async def seed(): yield ctx.data
+                ctx.data = seed()
+
+            source_gen = ctx.data
+
+            async def pipeline_wrapper():
+                try:
+                    async for item in source_gen:
+                        # Ejecutamos el handler sobre el item individual
+                        res = await handler(item, ctx) if inspect.iscoroutinefunction(handler) else handler(item, ctx)
+                        
+                        # Si el handler devuelve un generador (ej. LLM Stream), lo agotamos
+                        if inspect.isasyncgen(res):
+                            async for sub_item in res:
+                                yield sub_item
+                        elif res is not None:
+                            yield res
+                except Exception as e:
+                    raise RuntimeError(f"Stream failure in {handler.__name__}: {e}")
+                finally:
+                    await source_gen.aclose()
+
+            ctx.data = pipeline_wrapper()
+            return ctx
+            
+        return wrapper
+
+    async def run(self, initial_input: Any) -> AsyncGenerator:
+        """
+        Construye la tubería y empieza a emitir datos.
+        """
+        # 1. Creamos un contexto mínimo para el flujo
+        class ExecContext:
+            def __init__(self, data):
+                self.data = data
+                self.stop = False
+        
+        ctx = ExecContext(initial_input)
+
+        # 2. Construimos la tubería (Pipeline Building)
+        # Cada middleware envuelve al anterior en una capa de cebolla
+        for mw in self._middleware:
+            transformer = self._stream_transform(mw)
+            ctx = await transformer(ctx)
+
+        # 3. Consumimos el resultado final
+        # Al iterar aquí, se activan todos los 'pipeline_wrapper' encadenados
+        async for chunk in ctx.data:
+            yield chunk
+
+
 class Workflow:
     def __init__(self):
         self._middleware: List[Middleware] = []
-        self._registry: Dict[str, int] = {}
-        self._description: List[str] = []
+        self._registry: Dict[str, tuple[int, Optional[str]]] = {}
         self._cleanup_tasks: List[Callable] = []
 
     async def __call__(self, ctx: ExecContext) -> ExecContext:
@@ -30,11 +97,10 @@ class Workflow:
 
     def use(self, middleware: Middleware, name: Optional[str] = None, description: Optional[str] = None): # Coul be interesting add description to the middlewares
         self._middleware.append(middleware)
-        self._description.append(description)
         if name:
-            self._registry[name] = len(self._middleware) - 1
+            self._registry[name] = (len(self._middleware) - 1, description)
         else:
-            self._registry[middleware.__name__] = len(self._middleware) - 1    
+            self._registry[middleware.__name__] = (len(self._middleware) - 1, description)   
         return self
 
 
