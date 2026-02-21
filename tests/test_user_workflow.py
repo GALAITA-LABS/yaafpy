@@ -1,6 +1,6 @@
 import pytest
 from yaafpy.types import AgentConfig, ExecContext
-from yaafpy.workflows import Workflow
+from yaafpy.sequential_flows import Workflow
 
 @pytest.fixture
 def basic_ctx():

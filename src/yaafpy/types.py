@@ -1,5 +1,7 @@
 from typing import Any, Dict, Optional, List, Tuple
-from pydantic import BaseModel, Field, PrivateAttr
+from typing import Any, Dict, Optional
+from dataclasses import dataclass, field
+from typing import Callable, Awaitable, TypeAlias, Union
 
 """
 Allows skipping a specific middleware and continues with the normal execution path.
@@ -21,9 +23,10 @@ class WorkflowAbortException(Exception):
         super().__init__(message)        
 
 
-from typing import Any, Dict, Optional
-from dataclasses import dataclass, field
-import copy
+Middleware: TypeAlias = Callable[
+    [ExecContext],
+    Union[ExecContext, Awaitable[ExecContext]]
+]
 
 @dataclass
 class ExecContext:

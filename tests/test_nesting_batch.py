@@ -1,6 +1,6 @@
 import pytest
 from yaafpy.types import AgentConfig, ExecContext
-from yaafpy.workflows import Workflow
+from yaafpy.sequential_flows import Workflow
 from yaafpy.adapters import as_middleware
 
 @pytest.fixture

@@ -1,12 +1,10 @@
 import inspect
 import functools
 import asyncio
-from typing import Any, List, Callable, AsyncGenerator, Dict, Optional
+from typing import Any, List, AsyncGenerator, Dict, Optional
 from collections.abc import Iterable
 
-from yaafpy.types import ExecContext
-
-
+from yaafpy.types import ExecContext, Middleware
 
 
 class StreamWorkflow:
@@ -24,36 +22,45 @@ class StreamWorkflow:
     """
 
     def __init__(self):
-        self._middlewares: List[Callable] = []
+        self._middlewares: List[Middleware] = []
         self._registry: Dict[str, tuple[int, Optional[str]]] = {}
+        
 
     # ==========================================================
     # PUBLIC API
     # ==========================================================
 
-    def use(self, middleware: Callable):
+    def use(self, middleware: Middleware, name: Optional[str] = None, description: Optional[str] = None): 
         self._middlewares.append(middleware)
+        if name:
+            self._registry[name] = (len(self._middlewares) - 1, description)
+        else:
+            self._registry[middleware.__name__] = (len(self._middlewares) - 1, description)   
         return self
 
     async def run(self, ctx: ExecContext) -> AsyncGenerator[Any, None]:
         """
         Construye la tubería lazy y devuelve el AsyncGenerator final.
         """
-
-        # asure ctx.workflow
+ 
+        # Ensure ctx.workflow
         ctx.workflow = self
 
-        # 1️⃣ Normalizar el stream inicial bajo contrato async estricto
+        # Normalize the initial stream under strict async contract
         ctx.data = await self._ensure_async_stream(ctx.data)
 
-        # 2️⃣ Construcción onion (lazy chain)
+        # Build onion (lazy chain)
         for mw in self._middlewares:
             transformer = self._stream_transform(mw)
             ctx = await transformer(ctx)
 
-        # 3️⃣ Ejecutar el stream final
-        async for chunk in ctx.data:
-            yield chunk
+        # Execute the final stream
+        try:
+            async for chunk in ctx.data:
+                yield chunk
+        finally:
+            if hasattr(ctx.data, "aclose"):
+                await ctx.data.aclose()
 
     # ==========================================================
     # INTERNALS
@@ -74,11 +81,11 @@ class StreamWorkflow:
             - Generator síncrono (bloqueante)
         """
 
-        # 1️⃣ Ya es AsyncGenerator
+        # already AsyncGenerator
         if inspect.isasyncgen(data):
             return data
 
-        # 2️⃣ Generator síncrono → PROHIBIDO
+        # Generator síncrono → PROHIBIDO
         if inspect.isgenerator(data):
             raise TypeError(
                 "Sync generators are not allowed in StreamWorkflow. "
@@ -86,7 +93,7 @@ class StreamWorkflow:
                 "Use async generators instead."
             )
 
-        # 3️⃣ Iterable (no string)
+        # Iterable (no string)
         if isinstance(data, Iterable) and not isinstance(data, (str, bytes)):
 
             async def iterable_wrapper():
@@ -95,15 +102,15 @@ class StreamWorkflow:
 
             return iterable_wrapper()
 
-        # 4️⃣ Valor simple → seed async
+        # simple value → seed async
         async def seed():
             yield data
 
         return seed()
 
     def _stream_transform(
-        self, handler: Callable
-    ) -> Callable[[ExecContext], ExecContext]:
+        self, handler: Middleware
+    ) -> Middleware:
         """
         Envuelve el handler para construir la capa onion.
         Cada middleware transforma el stream anterior.
@@ -111,25 +118,27 @@ class StreamWorkflow:
 
         @functools.wraps(handler)
         async def wrapper(ctx: ExecContext) -> ExecContext:
-            if ctx.stop:
-                return ctx
-
             source_gen = ctx.data
 
             async def pipeline_wrapper() -> AsyncGenerator[Any, None]:
                 try:
                     async for item in source_gen:
+                        try:
+                            # Execute handler (sync or async)
+                            if inspect.isawaitable(handler):
+                                res = await handler(item)
+                            else:
+                                res = handler(item)
+                        except asyncio.CancelledError:
+                            # Propagar cancelación correctamente
+                            raise
+                        except Exception as e:
+                            # Agregar contexto, pero mantener tipo original
+                            raise RuntimeError(
+                                  f"Error in middleware '{handler.__name__}': {e}"
+                            ) from e
 
-                        if ctx.stop:
-                            break
-
-                        # Ejecutar handler (sync o async)
-                        if inspect.iscoroutinefunction(handler):
-                            res = await handler(item, ctx)
-                        else:
-                            res = handler(item, ctx)
-
-                        # 🔥 APLANADO
+                        # Flatten async generator
                         if inspect.isasyncgen(res):
                             async for sub_item in res:
                                 yield sub_item
@@ -142,9 +151,13 @@ class StreamWorkflow:
                     ) from e
 
                 finally:
-                    # Cierre en cascada
+                    # Cascade close
                     if hasattr(source_gen, "aclose"):
-                        await source_gen.aclose()
+                        try:
+                            await source_gen.aclose()
+                        except RuntimeError:
+                            pass  # Already closed, safe to ignore
+
 
             ctx.data = pipeline_wrapper()
             return ctx
