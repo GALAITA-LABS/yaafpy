@@ -1,9 +1,7 @@
 from yaafpy.types import Transform
 import inspect
 from typing import Any, List, AsyncGenerator, Dict, Optional
-
-
-from yaafpy.types import ExecContext, Transform, StreamHandler
+from yaafpy.types import ExecContext, Transform, StreamHandler, WorkflowAbortException
 
 
 class StreamWorkflow:
@@ -45,7 +43,11 @@ class StreamWorkflow:
         try:
             async for item in stream:
                 yield item
+        except WorkflowAbortException:
+            # Silenciamos la interrupción controlada
+            return
         finally:
+            # Cerramos el último eslabón de la cadena
             if hasattr(stream, "aclose"):
                 await stream.aclose()
 
@@ -61,44 +63,51 @@ class StreamWorkflow:
         Does NOT mutate ctx.data.
         """
         async def transform(source: AsyncGenerator[Any, None], ctx: ExecContext):
-            async for item in source:
+            try:
+                async for item in source:
+                    if ctx.stop:
+                        break
+                    
+                    # Ejecutar el handler
+                    result = handler(item, ctx)
 
-                if ctx.stop:
-                    break
+                    if inspect.isawaitable(result):
+                        result = await result
 
-                result = handler(item, ctx)  # pass item explicitly
-
-                if inspect.isawaitable(result):
-                    result = await result
-
-                # Support handler returning AsyncGenerator
-                if inspect.isasyncgen(result):
-                    async for sub in result:
-                        yield sub
-                else:   
-                    yield result
+                    if inspect.isasyncgen(result):
+                        async for sub in result:
+                            yield sub
+                    else:
+                        yield result
+            except WorkflowAbortException:
+                # Re-lanzar para que el 'run' principal lo capture y detenga todo
+                raise
+            finally:
+                # IMPORTANTE: Asegurar que el upstream se cierre siempre
+                if hasattr(source, "aclose"):
+                    await source.aclose()
 
         return transform
 
 
-    async def _build(self, source: AsyncGenerator[Any, None], ctx: Optional[ExecContext] = None):
+    async def _build(self, source: AsyncGenerator[Any, None], ctx: Optional[ExecContext] = None) -> AsyncGenerator[Any, None]:
         if ctx is None:
             ctx = ExecContext(data=None)
-
         stream = source
-        for handler in self._middlewares:
-            # Detect dynamically si es Transform o StreamHandler
-            if self._is_transform(handler):
-                transform = handler
-            else:
-                transform = self._transform_handler(handler)
-
-            # Aplicar la transformación
-            stream = transform(stream, ctx)
-
-        return stream
+        try:
+            # Build pipeline from last to fist Output(PostProc(LLM_Stream(PreProc(source))))
+            for handler in self._middlewares:
+                # Envolvemos CUALQUIER middleware para garantizar seguridad de cierre
+                stream = self._safe_wrap(handler, stream, ctx)
+            return stream
+        except Exception as e:
+            raise WorkflowAbortException(f"Error applying transform {handler.__name__}: {e}")
 
     def _is_transform(self, fn) -> bool:
+        
+        # Detecta si es un transform marcado con @handler_to_transform
+        if getattr(fn, "_is_yaaf_transform", False):
+            return True
         
         # Detecta async generator real
         sig = inspect.signature(fn)
@@ -110,3 +119,37 @@ class StreamWorkflow:
         return False
         
         
+    def _safe_wrap(self, handler, source: AsyncGenerator, ctx: ExecContext) -> AsyncGenerator:
+        """
+        Garantiza que no importa qué pase, el 'source' (upstream) se cierre.
+        """
+        async def safe_generator():
+            try:
+                if self._is_transform(handler):
+                    # Es un Transform nativo: async def (source, ctx)
+                    async for item in handler(source, ctx):
+                        yield item
+                else:
+                    # Es un StreamHandler simple: (item, ctx)
+                    async for item in source:
+                        if ctx.stop: break
+                        
+                        result = handler(item, ctx)
+                        if inspect.isawaitable(result):
+                            result = await result
+                            
+                        if inspect.isasyncgen(result):
+                            async for sub in result: yield sub
+                        else:
+                            yield result
+            except (WorkflowAbortException, GeneratorExit):
+                raise
+            except Exception as e:
+                # Opcional: Loguear error aquí
+                raise
+            finally:
+                # ESTA es la clave: el efecto dominó de cierre hacia atrás
+                if hasattr(source, "aclose"):
+                    await source.aclose()
+        
+        return safe_generator()
