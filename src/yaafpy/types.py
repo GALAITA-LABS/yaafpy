@@ -1,7 +1,7 @@
 from typing import Any, Dict, Optional, List, Tuple
 from typing import Any, Dict, Optional
 from dataclasses import dataclass, field
-from typing import Callable, Awaitable, TypeAlias, Union
+from typing import Callable, Awaitable, TypeAlias, Union, AsyncGenerator
 
 """
 Allows skipping a specific middleware and continues with the normal execution path.
@@ -23,23 +23,36 @@ class WorkflowAbortException(Exception):
         super().__init__(message)        
 
 
+@dataclass
+class ExecContext:
+    # 1. The Payload: Business data that is transformed
+    data: Any = None
+    
+    # 2. Flow Control: Flags for sequential workflow
+    jump_to: Optional[str] = None
+    stop: bool = False
+    
+    # 3. Infrastructure Bus: Here lives everything else
+    # - shared_data['metadata']: Traceability, logs, IDs
+    # - shared_data['cleanup']: The CleanupManager
+    # - shared_data['auth']: Tokens or session info
+    shared_data: Dict[str, Any] = field(default_factory=dict)
+
 Middleware: TypeAlias = Callable[
     [ExecContext],
     Union[ExecContext, Awaitable[ExecContext]]
 ]
 
-@dataclass
-class ExecContext:
-    # 1. El Payload: Los datos de negocio que se transforman
-    data: Any
-    
-    # 2. Control de Flujo: Flags para el motor
-    jump_to: Optional[str] = None
-    stop: bool = False
-    
-    # 3. Bus de Infraestructura: Aquí vive TODO lo demás
-    # - shared_data['metadata']: Trazabilidad, logs, IDs
-    # - shared_data['cleanup']: El CleanupManager
-    # - shared_data['auth']: Tokens o info de sesión
-    shared_data: Dict[str, Any] = field(default_factory=dict)
+StreamHandler: TypeAlias = Callable[
+    [Any, ExecContext],
+    Union[
+        Any,
+        Awaitable[Any],
+        AsyncGenerator[Any, None]
+    ]
+]
 
+Transform = Callable[
+    [AsyncGenerator[Any, None], ExecContext],
+    AsyncGenerator[Any, None]
+]

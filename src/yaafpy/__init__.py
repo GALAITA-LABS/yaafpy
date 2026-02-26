@@ -1,15 +1,18 @@
-from .workflows import Workflow
-from .types import ExecContext, AgentConfig, WorkflowAllowException, WorkflowAbortException
+from .sequential_flows import Workflow
+from .stream_flows import StreamWorkflow
+from .types import ExecContext, WorkflowAllowException, WorkflowAbortException, Transform, StreamHandler
 from .adapters import as_middleware, normalize_step_result
 
 __all__ = [
     "Workflow",
+    "StreamWorkflow",
     "ExecContext",
-    "AgentConfig",
     "WorkflowAllowException",
     "WorkflowAbortException",
+    "Transform",
+    "StreamHandler",
     "as_middleware",
     "normalize_step_result"
 ]
 
-__version__ = "0.1.2"
+__version__ = "0.2.0"

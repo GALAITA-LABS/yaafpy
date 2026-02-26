@@ -93,3 +93,8 @@ dmypy.json
 # Editors
 .vscode/
 .idea/
+
+
+# Dev test
+
+prueba*.py
