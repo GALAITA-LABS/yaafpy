@@ -31,6 +31,7 @@ class ExecContext:
     # 2. Flow Control: Flags for sequential workflow
     jump_to: Optional[str] = None
     stop: bool = False
+    workflow: Optional['Workflow'] = None
     
     # 3. Infrastructure Bus: Here lives everything else
     # - shared_data['metadata']: Traceability, logs, IDs
