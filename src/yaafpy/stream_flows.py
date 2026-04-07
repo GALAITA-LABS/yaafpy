@@ -47,16 +47,22 @@ class StreamWorkflow:
             # Silenciamos la interrupción controlada
             return
         finally:
-            # Cerramos el último eslabón de la cadena
             if hasattr(source, "aclose"):
-                    # Check if the generator is currently executing
-                    # This prevents the "already running" RuntimeError
-                    if inspect.getgeneratorstate(source) != inspect.GEN_RUNNING:
-                        try:
-                            await source.aclose()
-                        except RuntimeError:
-                            # Catch the "already running" error if the check above missed it
-                            pass
+                    # Check if it's an async generator and if it's currently busy
+                    # Async generators use 'ag_running'
+                    is_running = getattr(source, "ag_running", False)
+                
+            if not is_running:
+                try:
+                    await source.aclose()
+                except RuntimeError as e:
+                    # Fallback in case of a race condition
+                    if "already running" not in str(e):
+                        raise
+            else:
+                # If it's running, we can't aclose() it. 
+                # The task currently owning the generator will handle its own exit.
+                pass
 
     
     # ==========================================================
@@ -156,13 +162,20 @@ class StreamWorkflow:
                 raise
             finally:
                 if hasattr(source, "aclose"):
-                    # Check if the generator is currently executing
-                    # This prevents the "already running" RuntimeError
-                    if inspect.getgeneratorstate(source) != inspect.GEN_RUNNING:
-                        try:
-                            await source.aclose()
-                        except RuntimeError:
-                            # Catch the "already running" error if the check above missed it
-                            pass
+                    # Check if it's an async generator and if it's currently busy
+                    # Async generators use 'ag_running'
+                    is_running = getattr(source, "ag_running", False)
+                
+                if not is_running:
+                    try:
+                        await source.aclose()
+                    except RuntimeError as e:
+                        # Fallback in case of a race condition
+                        if "already running" not in str(e):
+                            raise
+                else:
+                    # If it's running, we can't aclose() it. 
+                    # The task currently owning the generator will handle its own exit.
+                    pass
         
         return safe_generator()
