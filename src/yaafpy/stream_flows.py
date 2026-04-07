@@ -148,8 +148,14 @@ class StreamWorkflow:
                 # Opcional: Loguear error aquí
                 raise
             finally:
-                # ESTA es la clave: el efecto dominó de cierre hacia atrás
                 if hasattr(source, "aclose"):
-                    await source.aclose()
+                    # Check if the generator is currently executing
+                    # This prevents the "already running" RuntimeError
+                    if inspect.getgeneratorstate(source) != inspect.GEN_RUNNING:
+                        try:
+                            await source.aclose()
+                        except RuntimeError:
+                            # Catch the "already running" error if the check above missed it
+                            pass
         
         return safe_generator()
