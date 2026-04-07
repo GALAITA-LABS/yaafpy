@@ -48,8 +48,15 @@ class StreamWorkflow:
             return
         finally:
             # Cerramos el último eslabón de la cadena
-            if hasattr(stream, "aclose"):
-                await stream.aclose()
+            if hasattr(source, "aclose"):
+                    # Check if the generator is currently executing
+                    # This prevents the "already running" RuntimeError
+                    if inspect.getgeneratorstate(source) != inspect.GEN_RUNNING:
+                        try:
+                            await source.aclose()
+                        except RuntimeError:
+                            # Catch the "already running" error if the check above missed it
+                            pass
 
     
     # ==========================================================
